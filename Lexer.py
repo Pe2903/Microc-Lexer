@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import enum
+import string
 from dataclasses import dataclass
 from typing import Iterator
 
@@ -75,6 +76,21 @@ class LexerError(Exception):
         return f"erro léxico em {self.line}:{self.column}: {self.message}"
 
 
+PALAVRAS_RESERVADAS: dict[str, TokenKind] = {
+    "int": TokenKind.KW_INT,
+    "bool": TokenKind.KW_BOOL,
+    "void": TokenKind.KW_VOID,
+    "true": TokenKind.KW_TRUE,
+    "false": TokenKind.KW_FALSE,
+    "if": TokenKind.KW_IF,
+    "else": TokenKind.KW_ELSE,
+    "while": TokenKind.KW_WHILE,
+    "return": TokenKind.KW_RETURN,
+    "print": TokenKind.KW_PRINT,
+}
+
+INICIO_IDENTIFICADOR = frozenset(string.ascii_letters + "_")
+CORPO_IDENTIFICADOR = frozenset(string.ascii_letters + string.digits + "_")
 ESPACOS = frozenset(" \t\r\n")
 
 
@@ -110,6 +126,21 @@ class Lexer:
         while self._olhar() in ESPACOS:
             self._avancar()
 
+    def _identificador_ou_palavra_reservada(self, linha: int, coluna: int) -> Token:
+        inicio = self.pos
+        while self._olhar() in CORPO_IDENTIFICADOR:
+            self._avancar()
+        lexema = self.source[inicio:self.pos]
+
+        reservada = PALAVRAS_RESERVADAS.get(lexema)
+        if reservada is None:
+            return Token(TokenKind.IDENTIFIER, lexema, lexema, linha, coluna)
+        if reservada is TokenKind.KW_TRUE:
+            return Token(reservada, lexema, True, linha, coluna)
+        if reservada is TokenKind.KW_FALSE:
+            return Token(reservada, lexema, False, linha, coluna)
+        return Token(reservada, lexema, None, linha, coluna)
+
     def tokens(self) -> Iterator[Token]:
         """Produza todos os tokens significativos e um único EOF ao final."""
         while True:
@@ -120,6 +151,11 @@ class Lexer:
                 return
 
             linha, coluna = self.line, self.column
+
+            if self._olhar() in INICIO_IDENTIFICADOR:
+                yield self._identificador_ou_palavra_reservada(linha, coluna)
+                continue
+
             caractere = self._avancar()
             raise LexerError(f"caractere inesperado {caractere!r}", linha, coluna)
 
